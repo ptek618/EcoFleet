@@ -1,12 +1,10 @@
-name: ecofleet-apu-corrected
+name: ecofleet-apu-dockerfile
 services:
 - name: backend
-  source_dir: /backend
   git:
     repo_clone_url: https://github.com/ptek618/EcoFleet.git
     branch: devin/1754147792-ecofleet-mobile-app
-  run_command: poetry install && poetry run fastapi run app/main.py --host 0.0.0.0 --port $PORT
-  environment_slug: python
+  dockerfile_path: Dockerfile.backend
   instance_count: 1
   instance_size_slug: basic-xxs
   routes:
@@ -22,13 +20,10 @@ services:
     value: ${ecofleet-db.DATABASE_URL}
     scope: RUN_TIME
 - name: frontend
-  source_dir: /frontend
   git:
     repo_clone_url: https://github.com/ptek618/EcoFleet.git
     branch: devin/1754147792-ecofleet-mobile-app
-  build_command: npm run build
-  run_command: npx serve -s dist -p $PORT
-  environment_slug: node-js
+  dockerfile_path: Dockerfile.frontend
   instance_count: 1
   instance_size_slug: basic-xxs
   routes:
