@@ -4,12 +4,18 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
+from sqlalchemy.orm import Session
 import jwt
 import hashlib
 import uuid
 import os
+import json
 from enum import Enum
 from dotenv import load_dotenv
+
+from .database import get_db, create_tables, UserDB, DealerDB, DownloadDB, FAQDB, APUDeviceDB, ForumPostDB, ServiceRecordDB, PhotoUploadDB
+from .auth import get_current_user, require_paid_user, UserRole, SECRET_KEY, ALGORITHM
+from . import admin
 
 load_dotenv()
 
@@ -24,23 +30,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-security = HTTPBearer()
-SECRET_KEY = os.getenv("SECRET_KEY", "ecofleet-secret-key-2025")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
-users_db = {}
-dealers_db = []
-downloads_db = []
-faq_db = []
-forum_posts_db = []
-service_history_db = {}
-photos_db = []
-apu_devices_db = {}
+create_tables()
+app.include_router(admin.router)
 
-class UserRole(str, Enum):
-    FREE = "free"
-    PAID = "paid"
-    ADMIN = "admin"
 
 class APUStatus(str, Enum):
     STOPPED = "stopped"
@@ -168,233 +161,348 @@ def create_access_token(data: dict):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+
+def init_sample_data(db: Session):
+    if db.query(DealerDB).count() == 0:
+        dealers = [
+            DealerDB(
+                id="dealer1",
+                name="EcoFleet Service Center - Chicago",
+                address="123 Industrial Blvd",
+                city="Chicago",
+                state="IL",
+                zip_code="60601",
+                phone="(312) 555-0123",
+                email="chicago@ecofleet.com",
+                services=json.dumps(["sales", "service", "support"]),
+                latitude=41.8781,
+                longitude=-87.6298
+            ),
+            DealerDB(
+                id="dealer2",
+                name="Midwest APU Solutions",
+                address="456 Truck Stop Way",
+                city="Indianapolis",
+                state="IN",
+                zip_code="46201",
+                phone="(317) 555-0456",
+                email="indy@midwestapu.com",
+                services=json.dumps(["service", "support"]),
+                latitude=39.7684,
+                longitude=-86.1581
+            )
+        ]
+        db.add_all(dealers)
+    
+    if db.query(DownloadDB).count() == 0:
+        downloads = [
+            DownloadDB(
+                id="download1",
+                title="HP2000 APU Installation Manual",
+                description="Complete installation guide for HP2000 APU systems",
+                file_url="/downloads/hp2000-install-manual.pdf",
+                category="manual",
+                version="v2.1",
+                file_size="5.2 MB",
+                upload_date=datetime.now()
+            ),
+            DownloadDB(
+                id="download2",
+                title="Firmware Update v3.4.1",
+                description="Latest firmware update with improved efficiency",
+                file_url="/downloads/firmware-v3.4.1.bin",
+                category="update",
+                version="3.4.1",
+                file_size="2.8 MB",
+                upload_date=datetime.now()
+            )
+        ]
+        db.add_all(downloads)
+    
+    if db.query(FAQDB).count() == 0:
+        faqs = [
+            FAQDB(
+                id="faq1",
+                question="How do I start my HP2000 APU remotely?",
+                answer="Use the EcoFleet mobile app to start your APU remotely. Ensure you have a paid subscription and your device is connected to the network.",
+                category="operation",
+                order=1
+            ),
+            FAQDB(
+                id="faq2",
+                question="What maintenance is required for my APU?",
+                answer="Regular maintenance includes oil changes every 500 hours, air filter replacement every 250 hours, and annual inspections.",
+                category="maintenance",
+                order=2
+            )
+        ]
+        db.add_all(faqs)
+    
+    if db.query(UserDB).filter(UserDB.role == "admin").count() == 0:
+        admin_user = UserDB(
+            id="admin-user-1",
+            email="admin@ecofleet.com",
+            password=hash_password("admin123"),
+            full_name="EcoFleet Administrator",
+            role="admin",
+            created_at=datetime.now()
+        )
+        db.add(admin_user)
+    
+    db.commit()
+
+@app.on_event("startup")
+async def startup_event():
+    from .database import SessionLocal
+    db = SessionLocal()
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        user = users_db.get(user_id)
-        if user is None:
-            raise HTTPException(status_code=401, detail="User not found")
-        return user
-    except jwt.PyJWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-def require_paid_user(current_user: dict = Depends(get_current_user)):
-    if current_user["role"] not in [UserRole.PAID, UserRole.ADMIN]:
-        raise HTTPException(status_code=403, detail="Paid subscription required")
-    return current_user
-
-def init_sample_data():
-    dealers_db.extend([
-        {
-            "id": "dealer1",
-            "name": "EcoFleet Service Center - Chicago",
-            "address": "123 Industrial Blvd",
-            "city": "Chicago",
-            "state": "IL",
-            "zip_code": "60601",
-            "phone": "(312) 555-0123",
-            "email": "chicago@ecofleet.com",
-            "services": ["sales", "service", "support"],
-            "latitude": 41.8781,
-            "longitude": -87.6298
-        },
-        {
-            "id": "dealer2", 
-            "name": "Midwest APU Solutions",
-            "address": "456 Truck Stop Way",
-            "city": "Indianapolis",
-            "state": "IN",
-            "zip_code": "46201",
-            "phone": "(317) 555-0456",
-            "email": "indy@midwestapu.com",
-            "services": ["service", "support"],
-            "latitude": 39.7684,
-            "longitude": -86.1581
-        }
-    ])
-    
-    downloads_db.extend([
-        {
-            "id": "download1",
-            "title": "HP2000 APU Installation Manual",
-            "description": "Complete installation guide for HP2000 APU systems",
-            "file_url": "/downloads/hp2000-install-manual.pdf",
-            "category": "manual",
-            "version": "v2.1",
-            "file_size": "5.2 MB",
-            "upload_date": datetime.now()
-        },
-        {
-            "id": "download2",
-            "title": "Firmware Update v3.4.1",
-            "description": "Latest firmware update with improved efficiency",
-            "file_url": "/downloads/firmware-v3.4.1.bin",
-            "category": "update",
-            "version": "3.4.1",
-            "file_size": "2.8 MB",
-            "upload_date": datetime.now()
-        }
-    ])
-    
-    faq_db.extend([
-        {
-            "id": "faq1",
-            "question": "How do I start my HP2000 APU remotely?",
-            "answer": "Use the EcoFleet mobile app to start your APU remotely. Ensure you have a paid subscription and your device is connected to the network.",
-            "category": "operation",
-            "order": 1
-        },
-        {
-            "id": "faq2",
-            "question": "What maintenance is required for my APU?",
-            "answer": "Regular maintenance includes oil changes every 500 hours, air filter replacement every 250 hours, and annual inspections.",
-            "category": "maintenance",
-            "order": 2
-        }
-    ])
-
-init_sample_data()
+        init_sample_data(db)
+    finally:
+        db.close()
 
 @app.get("/healthz")
 async def healthz():
     return {"status": "ok"}
 
 @app.post("/auth/register")
-async def register(user_data: UserCreate):
-    if user_data.email in [u["email"] for u in users_db.values()]:
+async def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    existing_user = db.query(UserDB).filter(UserDB.email == user_data.email).first()
+    if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     user_id = str(uuid.uuid4())
     hashed_password = hash_password(user_data.password)
     
-    user = {
-        "id": user_id,
-        "email": user_data.email,
-        "password": hashed_password,
-        "full_name": user_data.full_name,
-        "phone": user_data.phone,
-        "role": user_data.role,
-        "created_at": datetime.now()
-    }
+    user = UserDB(
+        id=user_id,
+        email=user_data.email,
+        password=hashed_password,
+        full_name=user_data.full_name,
+        phone=user_data.phone,
+        role=user_data.role,
+        created_at=datetime.now()
+    )
     
-    users_db[user_id] = user
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     
     token = create_access_token({"sub": user_id})
-    return {"access_token": token, "token_type": "bearer", "user": User(**user)}
+    return {"access_token": token, "token_type": "bearer", "user": User(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        phone=user.phone,
+        role=user.role,
+        created_at=user.created_at
+    )}
 
 @app.post("/auth/login")
-async def login(login_data: UserLogin):
-    user = None
-    for u in users_db.values():
-        if u["email"] == login_data.email:
-            user = u
-            break
+async def login(login_data: UserLogin, db: Session = Depends(get_db)):
+    user = db.query(UserDB).filter(UserDB.email == login_data.email).first()
     
-    if not user or not verify_password(login_data.password, user["password"]):
+    if not user or not verify_password(login_data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    token = create_access_token({"sub": user["id"]})
-    return {"access_token": token, "token_type": "bearer", "user": User(**user)}
+    token = create_access_token({"sub": user.id})
+    return {"access_token": token, "token_type": "bearer", "user": User(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        phone=user.phone,
+        role=user.role,
+        created_at=user.created_at
+    )}
 
 @app.get("/auth/me")
 async def get_current_user_info(current_user: dict = Depends(get_current_user)):
     return User(**current_user)
 
 @app.get("/apu/devices")
-async def get_user_devices(current_user: dict = Depends(require_paid_user)):
-    user_devices = [device for device in apu_devices_db.values() if device["owner_id"] == current_user["id"]]
+async def get_user_devices(current_user: dict = Depends(require_paid_user), db: Session = Depends(get_db)):
+    user_devices = db.query(APUDeviceDB).filter(APUDeviceDB.owner_id == current_user["id"]).all()
     return user_devices
 
 @app.post("/apu/control")
-async def control_apu(control: APUControl, current_user: dict = Depends(require_paid_user)):
-    device = apu_devices_db.get(control.device_id)
-    if not device or device["owner_id"] != current_user["id"]:
+async def control_apu(control: APUControl, current_user: dict = Depends(require_paid_user), db: Session = Depends(get_db)):
+    device = db.query(APUDeviceDB).filter(APUDeviceDB.id == control.device_id, APUDeviceDB.owner_id == current_user["id"]).first()
+    if not device:
         raise HTTPException(status_code=404, detail="Device not found")
     
     if control.action == "start":
-        device["status"] = APUStatus.RUNNING
-        return {"message": "APU started successfully", "status": device["status"]}
+        device.status = APUStatus.RUNNING
+        db.commit()
+        return {"message": "APU started successfully", "status": device.status}
     elif control.action == "stop":
-        device["status"] = APUStatus.STOPPED
-        return {"message": "APU stopped successfully", "status": device["status"]}
+        device.status = APUStatus.STOPPED
+        db.commit()
+        return {"message": "APU stopped successfully", "status": device.status}
     elif control.action == "status":
-        return {"device_id": control.device_id, "status": device["status"], "details": device}
+        return {"device_id": control.device_id, "status": device.status, "details": {
+            "id": device.id,
+            "name": device.name,
+            "model": device.model,
+            "status": device.status,
+            "temperature": device.temperature,
+            "voltage": device.voltage,
+            "runtime_hours": device.runtime_hours,
+            "last_maintenance": device.last_maintenance,
+            "owner_id": device.owner_id
+        }}
     else:
         raise HTTPException(status_code=400, detail="Invalid action")
 
 @app.get("/apu/status/{device_id}")
-async def get_apu_status(device_id: str, current_user: dict = Depends(require_paid_user)):
-    device = apu_devices_db.get(device_id)
-    if not device or device["owner_id"] != current_user["id"]:
+async def get_apu_status(device_id: str, current_user: dict = Depends(require_paid_user), db: Session = Depends(get_db)):
+    device = db.query(APUDeviceDB).filter(APUDeviceDB.id == device_id, APUDeviceDB.owner_id == current_user["id"]).first()
+    if not device:
         raise HTTPException(status_code=404, detail="Device not found")
-    return device
+    return {
+        "id": device.id,
+        "name": device.name,
+        "model": device.model,
+        "status": device.status,
+        "temperature": device.temperature,
+        "voltage": device.voltage,
+        "runtime_hours": device.runtime_hours,
+        "last_maintenance": device.last_maintenance,
+        "owner_id": device.owner_id
+    }
 
 @app.get("/dealers")
-async def get_dealers(service_type: Optional[str] = None, state: Optional[str] = None):
-    filtered_dealers = dealers_db
-    
-    if service_type:
-        filtered_dealers = [d for d in filtered_dealers if service_type in d["services"]]
+async def get_dealers(service_type: Optional[str] = None, state: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(DealerDB)
     
     if state:
-        filtered_dealers = [d for d in filtered_dealers if d["state"].lower() == state.lower()]
+        query = query.filter(DealerDB.state.ilike(f"%{state}%"))
     
-    return filtered_dealers
+    dealers = query.all()
+    
+    if service_type:
+        filtered_dealers = []
+        for dealer in dealers:
+            services = json.loads(dealer.services)
+            if service_type in services:
+                filtered_dealers.append({
+                    "id": dealer.id,
+                    "name": dealer.name,
+                    "address": dealer.address,
+                    "city": dealer.city,
+                    "state": dealer.state,
+                    "zip_code": dealer.zip_code,
+                    "phone": dealer.phone,
+                    "email": dealer.email,
+                    "services": services,
+                    "latitude": dealer.latitude,
+                    "longitude": dealer.longitude
+                })
+        return filtered_dealers
+    
+    return [{
+        "id": dealer.id,
+        "name": dealer.name,
+        "address": dealer.address,
+        "city": dealer.city,
+        "state": dealer.state,
+        "zip_code": dealer.zip_code,
+        "phone": dealer.phone,
+        "email": dealer.email,
+        "services": json.loads(dealer.services),
+        "latitude": dealer.latitude,
+        "longitude": dealer.longitude
+    } for dealer in dealers]
 
 @app.get("/dealers/nearby")
-async def get_nearby_dealers(lat: float, lng: float, radius: float = 50.0):
+async def get_nearby_dealers(lat: float, lng: float, radius: float = 50.0, db: Session = Depends(get_db)):
     import math
     
     def calculate_distance(lat1, lon1, lat2, lon2):
-        R = 3959  # Earth's radius in miles
+        R = 3959
         dlat = math.radians(lat2 - lat1)
         dlon = math.radians(lon2 - lon1)
         a = math.sin(dlat/2) * math.sin(dlat/2) + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2) * math.sin(dlon/2)
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
         return R * c
     
+    dealers = db.query(DealerDB).all()
     nearby_dealers = []
-    for dealer in dealers_db:
-        distance = calculate_distance(lat, lng, dealer["latitude"], dealer["longitude"])
+    
+    for dealer in dealers:
+        distance = calculate_distance(lat, lng, dealer.latitude, dealer.longitude)
         if distance <= radius:
-            dealer_with_distance = dealer.copy()
-            dealer_with_distance["distance"] = round(distance, 1)
-            nearby_dealers.append(dealer_with_distance)
+            dealer_data = {
+                "id": dealer.id,
+                "name": dealer.name,
+                "address": dealer.address,
+                "city": dealer.city,
+                "state": dealer.state,
+                "zip_code": dealer.zip_code,
+                "phone": dealer.phone,
+                "email": dealer.email,
+                "services": json.loads(dealer.services),
+                "latitude": dealer.latitude,
+                "longitude": dealer.longitude,
+                "distance": round(distance, 1)
+            }
+            nearby_dealers.append(dealer_data)
     
     return sorted(nearby_dealers, key=lambda x: x["distance"])
 
 @app.get("/downloads")
-async def get_downloads(category: Optional[str] = None):
-    filtered_downloads = downloads_db
+async def get_downloads(category: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(DownloadDB)
     
     if category:
-        filtered_downloads = [d for d in filtered_downloads if d["category"] == category]
+        query = query.filter(DownloadDB.category == category)
     
-    return filtered_downloads
+    downloads = query.all()
+    return [{
+        "id": download.id,
+        "title": download.title,
+        "description": download.description,
+        "file_url": download.file_url,
+        "category": download.category,
+        "version": download.version,
+        "file_size": download.file_size,
+        "upload_date": download.upload_date
+    } for download in downloads]
 
 @app.get("/downloads/{download_id}")
-async def get_download(download_id: str):
-    download = next((d for d in downloads_db if d["id"] == download_id), None)
+async def get_download(download_id: str, db: Session = Depends(get_db)):
+    download = db.query(DownloadDB).filter(DownloadDB.id == download_id).first()
     if not download:
         raise HTTPException(status_code=404, detail="Download not found")
-    return download
+    return {
+        "id": download.id,
+        "title": download.title,
+        "description": download.description,
+        "file_url": download.file_url,
+        "category": download.category,
+        "version": download.version,
+        "file_size": download.file_size,
+        "upload_date": download.upload_date
+    }
 
 @app.get("/faq")
-async def get_faq(category: Optional[str] = None):
-    filtered_faq = faq_db
+async def get_faq(category: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(FAQDB)
     
     if category:
-        filtered_faq = [f for f in filtered_faq if f["category"] == category]
+        query = query.filter(FAQDB.category == category)
     
-    return sorted(filtered_faq, key=lambda x: x["order"])
+    faqs = query.order_by(FAQDB.order).all()
+    return [{
+        "id": faq.id,
+        "question": faq.question,
+        "answer": faq.answer,
+        "category": faq.category,
+        "order": faq.order
+    } for faq in faqs]
 
 @app.get("/faq/categories")
-async def get_faq_categories():
-    categories = list(set(f["category"] for f in faq_db))
-    return categories
+async def get_faq_categories(db: Session = Depends(get_db)):
+    categories = db.query(FAQDB.category).distinct().all()
+    return [category[0] for category in categories]
 
 @app.post("/contact")
 async def submit_contact_message(message: ContactMessage):
@@ -406,54 +514,117 @@ async def submit_contact_message(message: ContactMessage):
     }
 
 @app.get("/forum/posts")
-async def get_forum_posts(tag: Optional[str] = None, limit: int = 20):
-    filtered_posts = forum_posts_db
+async def get_forum_posts(tag: Optional[str] = None, limit: int = 20, db: Session = Depends(get_db)):
+    query = db.query(ForumPostDB).order_by(ForumPostDB.created_at.desc()).limit(limit)
+    posts = query.all()
     
-    if tag:
-        filtered_posts = [p for p in filtered_posts if tag in p["tags"]]
+    result = []
+    for post in posts:
+        tags = json.loads(post.tags)
+        if tag is None or tag in tags:
+            result.append({
+                "id": post.id,
+                "title": post.title,
+                "content": post.content,
+                "author_id": post.author_id,
+                "author_name": post.author_name,
+                "created_at": post.created_at,
+                "replies": json.loads(post.replies),
+                "tags": tags
+            })
     
-    return sorted(filtered_posts, key=lambda x: x["created_at"], reverse=True)[:limit]
+    return result
 
 @app.post("/forum/posts")
-async def create_forum_post(title: str, content: str, tags: List[str], current_user: dict = Depends(get_current_user)):
+async def create_forum_post(title: str, content: str, tags: List[str], current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     post_id = str(uuid.uuid4())
-    post = {
-        "id": post_id,
-        "title": title,
-        "content": content,
-        "author_id": current_user["id"],
-        "author_name": current_user["full_name"],
-        "created_at": datetime.now(),
-        "replies": [],
-        "tags": tags
-    }
+    new_post = ForumPostDB(
+        id=post_id,
+        title=title,
+        content=content,
+        author_id=current_user["id"],
+        author_name=current_user["full_name"],
+        created_at=datetime.now(),
+        replies=json.dumps([]),
+        tags=json.dumps(tags)
+    )
     
-    forum_posts_db.append(post)
-    return post
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)
+    
+    return {
+        "id": new_post.id,
+        "title": new_post.title,
+        "content": new_post.content,
+        "author_id": new_post.author_id,
+        "author_name": new_post.author_name,
+        "created_at": new_post.created_at,
+        "replies": json.loads(new_post.replies),
+        "tags": json.loads(new_post.tags)
+    }
 
 @app.get("/forum/posts/{post_id}")
-async def get_forum_post(post_id: str):
-    post = next((p for p in forum_posts_db if p["id"] == post_id), None)
+async def get_forum_post(post_id: str, db: Session = Depends(get_db)):
+    post = db.query(ForumPostDB).filter(ForumPostDB.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    return post
+    
+    return {
+        "id": post.id,
+        "title": post.title,
+        "content": post.content,
+        "author_id": post.author_id,
+        "author_name": post.author_name,
+        "created_at": post.created_at,
+        "replies": json.loads(post.replies),
+        "tags": json.loads(post.tags)
+    }
 
 @app.get("/service/history")
-async def get_service_history(current_user: dict = Depends(get_current_user)):
-    user_services = service_history_db.get(current_user["id"], [])
-    return sorted(user_services, key=lambda x: x["service_date"], reverse=True)
+async def get_service_history(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    service_records = db.query(ServiceRecordDB).filter(ServiceRecordDB.user_id == current_user["id"]).all()
+    return sorted([{
+        "id": record.id,
+        "device_id": record.device_id,
+        "service_type": record.service_type,
+        "description": record.description,
+        "cost": record.cost,
+        "service_date": record.service_date,
+        "technician": record.technician,
+        "status": record.status
+    } for record in service_records], key=lambda x: x["service_date"], reverse=True)
 
 @app.post("/service/history")
-async def add_service_record(record: ServiceRecord, current_user: dict = Depends(get_current_user)):
-    if current_user["id"] not in service_history_db:
-        service_history_db[current_user["id"]] = []
+async def add_service_record(record: ServiceRecord, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    record_id = str(uuid.uuid4())
+    new_record = ServiceRecordDB(
+        id=record_id,
+        user_id=current_user["id"],
+        device_id=record.device_id,
+        service_type=record.service_type,
+        description=record.description,
+        cost=record.cost,
+        service_date=record.service_date,
+        technician=record.technician,
+        status=record.status
+    )
     
-    record_dict = record.dict()
-    record_dict["user_id"] = current_user["id"]
-    record_dict["id"] = str(uuid.uuid4())
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
     
-    service_history_db[current_user["id"]].append(record_dict)
-    return record_dict
+    return {
+        "id": new_record.id,
+        "device_id": new_record.device_id,
+        "service_type": new_record.service_type,
+        "description": new_record.description,
+        "cost": new_record.cost,
+        "service_date": new_record.service_date,
+        "technician": new_record.technician,
+        "status": new_record.status,
+        "user_id": new_record.user_id
+    }
 
 @app.get("/social/links")
 async def get_social_media_links():
@@ -466,66 +637,49 @@ async def get_social_media_links():
     }
 
 @app.get("/photos")
-async def get_photos(status: Optional[PhotoStatus] = PhotoStatus.APPROVED):
-    filtered_photos = [p for p in photos_db if p["status"] == status]
-    return sorted(filtered_photos, key=lambda x: x["upload_date"], reverse=True)
+async def get_photos(status: Optional[PhotoStatus] = PhotoStatus.APPROVED, db: Session = Depends(get_db)):
+    photos = db.query(PhotoUploadDB).filter(PhotoUploadDB.status == status).all()
+    return sorted([{
+        "id": photo.id,
+        "user_id": photo.user_id,
+        "filename": photo.filename,
+        "caption": photo.caption,
+        "status": photo.status,
+        "upload_date": photo.upload_date,
+        "approval_date": photo.approval_date,
+        "admin_notes": photo.admin_notes
+    } for photo in photos], key=lambda x: x["upload_date"], reverse=True)
 
 @app.post("/photos/upload")
-async def upload_photo(caption: str, current_user: dict = Depends(get_current_user)):
+async def upload_photo(caption: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     photo_id = str(uuid.uuid4())
-    photo = {
-        "id": photo_id,
-        "user_id": current_user["id"],
-        "filename": f"photo_{photo_id}.jpg",
-        "caption": caption,
-        "status": PhotoStatus.PENDING,
-        "upload_date": datetime.now(),
-        "approval_date": None,
-        "admin_notes": None
-    }
+    new_photo = PhotoUploadDB(
+        id=photo_id,
+        user_id=current_user["id"],
+        filename=f"photo_{photo_id}.jpg",
+        caption=caption,
+        status=PhotoStatus.PENDING,
+        upload_date=datetime.now(),
+        approval_date=None,
+        admin_notes=None
+    )
     
-    photos_db.append(photo)
+    db.add(new_photo)
+    db.commit()
+    db.refresh(new_photo)
+    
     return {"message": "Photo uploaded successfully. It will be reviewed for approval.", "photo_id": photo_id}
 
 @app.get("/photos/my-uploads")
-async def get_my_photos(current_user: dict = Depends(get_current_user)):
-    user_photos = [p for p in photos_db if p["user_id"] == current_user["id"]]
-    return sorted(user_photos, key=lambda x: x["upload_date"], reverse=True)
-
-@app.put("/admin/photos/{photo_id}/approve")
-async def approve_photo(photo_id: str, admin_notes: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    photo = next((p for p in photos_db if p["id"] == photo_id), None)
-    if not photo:
-        raise HTTPException(status_code=404, detail="Photo not found")
-    
-    photo["status"] = PhotoStatus.APPROVED
-    photo["approval_date"] = datetime.now()
-    photo["admin_notes"] = admin_notes
-    
-    return {"message": "Photo approved successfully"}
-
-@app.put("/admin/photos/{photo_id}/reject")
-async def reject_photo(photo_id: str, admin_notes: str, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    photo = next((p for p in photos_db if p["id"] == photo_id), None)
-    if not photo:
-        raise HTTPException(status_code=404, detail="Photo not found")
-    
-    photo["status"] = PhotoStatus.REJECTED
-    photo["approval_date"] = datetime.now()
-    photo["admin_notes"] = admin_notes
-    
-    return {"message": "Photo rejected"}
-
-@app.get("/admin/photos/pending")
-async def get_pending_photos(current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
-    pending_photos = [p for p in photos_db if p["status"] == PhotoStatus.PENDING]
-    return sorted(pending_photos, key=lambda x: x["upload_date"])
+async def get_my_photos(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    user_photos = db.query(PhotoUploadDB).filter(PhotoUploadDB.user_id == current_user["id"]).all()
+    return sorted([{
+        "id": photo.id,
+        "user_id": photo.user_id,
+        "filename": photo.filename,
+        "caption": photo.caption,
+        "status": photo.status,
+        "upload_date": photo.upload_date,
+        "approval_date": photo.approval_date,
+        "admin_notes": photo.admin_notes
+    } for photo in user_photos], key=lambda x: x["upload_date"], reverse=True)

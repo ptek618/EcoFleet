@@ -15,6 +15,10 @@ import { ForumPage } from '@/pages/ForumPage'
 import { ServiceHistoryPage } from '@/pages/ServiceHistoryPage'
 import { PhotoAlbumPage } from '@/pages/PhotoAlbumPage'
 import { ProfilePage } from '@/pages/ProfilePage'
+import AdminDashboardPage from '@/pages/AdminDashboardPage'
+import AdminUsersPage from '@/pages/AdminUsersPage'
+import AdminPhotosPage from '@/pages/AdminPhotosPage'
+import AdminContentPage from '@/pages/AdminContentPage'
 import './App.css'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -30,6 +34,28 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   
   if (!user) {
     return <Navigate to="/login" replace />
+  }
+  
+  return <>{children}</>
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+  
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+  
+  if (!user) {
+    return <Navigate to="/login" replace />
+  }
+  
+  if (user.role !== 'admin') {
+    return <Navigate to="/dashboard" replace />
   }
   
   return <>{children}</>
@@ -94,6 +120,26 @@ function AppContent() {
             <ProtectedRoute>
               <ProfilePage />
             </ProtectedRoute>
+          } />
+          <Route path="/admin/dashboard" element={
+            <AdminRoute>
+              <AdminDashboardPage />
+            </AdminRoute>
+          } />
+          <Route path="/admin/users" element={
+            <AdminRoute>
+              <AdminUsersPage />
+            </AdminRoute>
+          } />
+          <Route path="/admin/photos" element={
+            <AdminRoute>
+              <AdminPhotosPage />
+            </AdminRoute>
+          } />
+          <Route path="/admin/content" element={
+            <AdminRoute>
+              <AdminContentPage />
+            </AdminRoute>
           } />
           <Route path="/" element={user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />} />
         </Routes>

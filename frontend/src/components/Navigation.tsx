@@ -15,7 +15,11 @@ import {
   Camera, 
   User,
   LogOut,
-  Zap
+  Zap,
+  Settings,
+  Users,
+  FileText,
+  Shield
 } from 'lucide-react'
 
 export function Navigation() {
@@ -41,9 +45,18 @@ export function Navigation() {
     { path: '/photos', label: 'Photo Album', icon: Camera },
   ]
 
+  const adminItems = [
+    { path: '/admin/dashboard', label: 'Admin Dashboard', icon: Settings },
+    { path: '/admin/users', label: 'User Management', icon: Users },
+    { path: '/admin/photos', label: 'Photo Review', icon: Camera },
+    { path: '/admin/content', label: 'Content Management', icon: FileText },
+  ]
+
   const filteredItems = navigationItems.filter(item => 
     !item.requiresPaid || (user?.role === 'paid' || user?.role === 'admin')
   )
+
+  const showAdminItems = user?.role === 'admin'
 
   return (
     <nav className="bg-white shadow-lg fixed top-0 left-0 right-0 z-50">
@@ -77,6 +90,30 @@ export function Navigation() {
                 </Link>
               )
             })}
+            
+            {showAdminItems && (
+              <>
+                <div className="h-4 border-l border-gray-300 mx-2"></div>
+                {adminItems.map((item) => {
+                  const Icon = item.icon
+                  const isActive = location.pathname === item.path
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-red-100 text-red-700'
+                          : 'text-red-600 hover:text-red-900 hover:bg-red-50'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{item.label}</span>
+                    </Link>
+                  )
+                })}
+              </>
+            )}
             
             <div className="flex items-center space-x-2 ml-4 pl-4 border-l border-gray-200">
               <Link to="/profile">
@@ -125,6 +162,36 @@ export function Navigation() {
                 </Link>
               )
             })}
+            
+            {showAdminItems && (
+              <>
+                <div className="border-t border-gray-200 pt-2 mt-2">
+                  <div className="px-3 py-1 text-xs font-semibold text-red-600 uppercase tracking-wide">
+                    <Shield className="w-4 h-4 inline mr-1" />
+                    Admin Portal
+                  </div>
+                  {adminItems.map((item) => {
+                    const Icon = item.icon
+                    const isActive = location.pathname === item.path
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className={`flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium ${
+                          isActive
+                            ? 'bg-red-100 text-red-700'
+                            : 'text-red-600 hover:text-red-900 hover:bg-red-50'
+                        }`}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <Icon className="w-5 h-5" />
+                        <span>{item.label}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </>
+            )}
             <div className="border-t border-gray-200 pt-2">
               <Link
                 to="/profile"
