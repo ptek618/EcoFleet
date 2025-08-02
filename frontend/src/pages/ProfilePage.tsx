@@ -9,9 +9,8 @@ import { Separator } from '../components/ui/separator'
 import { Alert, AlertDescription } from '../components/ui/alert'
 import { 
   User, 
-  Mail, 
-  Phone, 
-  Calendar, 
+  Mail,
+  Calendar,
   Crown, 
   Users,
   Edit,
@@ -42,7 +41,7 @@ export function ProfilePage() {
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
 
-  const API_BASE_URL = 'http://localhost:8000'
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
   React.useEffect(() => {
     fetchSocialLinks()

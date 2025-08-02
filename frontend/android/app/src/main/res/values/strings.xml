@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">EcoFleet APU</string>
+    <string name="title_activity_main">EcoFleet APU</string>
+    <string name="package_name">com.ecofleet.apu</string>
+    <string name="custom_url_scheme">com.ecofleet.apu</string>
+</resources>

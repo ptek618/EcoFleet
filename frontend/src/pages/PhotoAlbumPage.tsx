@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
+import { Card, CardContent } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog'
+import { Camera as CapacitorCamera } from '@capacitor/camera'
+import { CameraResultType, CameraSource } from '@capacitor/camera'
 import { 
   Camera, 
   Upload, 
@@ -30,14 +32,14 @@ interface Photo {
 }
 
 export function PhotoAlbumPage() {
-  const { user, token } = useAuth()
+  const { token } = useAuth()
   const [publicPhotos, setPublicPhotos] = useState<Photo[]>([])
   const [myPhotos, setMyPhotos] = useState<Photo[]>([])
   const [loading, setLoading] = useState(true)
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [uploadCaption, setUploadCaption] = useState('')
 
-  const API_BASE_URL = 'http://localhost:8000'
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
   useEffect(() => {
     fetchPublicPhotos()
@@ -71,6 +73,46 @@ export function PhotoAlbumPage() {
       console.error('Failed to fetch my photos:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleCameraCapture = async () => {
+    if (!uploadCaption) return
+
+    try {
+      const image = await CapacitorCamera.getPhoto({
+        quality: 90,
+        allowEditing: true,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera,
+      })
+
+      if (image.dataUrl) {
+        const response = await fetch(image.dataUrl)
+        const blob = await response.blob()
+        const file = new File([blob], 'camera-photo.jpg', { type: 'image/jpeg' })
+        
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('caption', uploadCaption)
+
+        const uploadResponse = await fetch(`${API_BASE_URL}/photos/upload`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        })
+
+        if (uploadResponse.ok) {
+          setUploadCaption('')
+          setIsUploadDialogOpen(false)
+          fetchMyPhotos()
+        }
+      }
+    } catch (error) {
+      console.error('Camera error:', error)
+      alert('Failed to capture photo')
     }
   }
 
@@ -157,9 +199,21 @@ export function PhotoAlbumPage() {
                   <Label htmlFor="photo">Photo File</Label>
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
                     <Camera className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 mb-2">Click to select a photo</p>
+                    <p className="text-gray-600 mb-2">Take a photo or select from gallery</p>
                     <p className="text-sm text-gray-500">JPG, PNG up to 10MB</p>
-                    <Input type="file" accept="image/*" className="mt-4" />
+                    <div className="flex space-x-2 mt-4">
+                      <Button 
+                        type="button"
+                        onClick={handleCameraCapture}
+                        disabled={!uploadCaption}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        <Camera className="w-4 h-4 mr-2" />
+                        Take Photo
+                      </Button>
+                      <Input type="file" accept="image/*" className="flex-1" />
+                    </div>
                   </div>
                 </div>
                 

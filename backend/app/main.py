@@ -7,22 +7,26 @@ from datetime import datetime, timedelta
 import jwt
 import hashlib
 import uuid
+import os
 from enum import Enum
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="EcoFleet APU API", version="1.0.0")
 
-# Disable CORS. Do not remove this for full-stack development.
+cors_origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 security = HTTPBearer()
-SECRET_KEY = "ecofleet-secret-key-2025"
-ALGORITHM = "HS256"
+SECRET_KEY = os.getenv("SECRET_KEY", "ecofleet-secret-key-2025")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 users_db = {}
 dealers_db = []

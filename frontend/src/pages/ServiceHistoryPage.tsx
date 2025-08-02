@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
@@ -15,7 +15,6 @@ import {
   DollarSign, 
   User, 
   Wrench,
-  ShoppingCart,
   Shield,
   CheckCircle,
   Clock,
@@ -35,7 +34,7 @@ interface ServiceRecord {
 }
 
 export function ServiceHistoryPage() {
-  const { user, token } = useAuth()
+  const { token } = useAuth()
   const [records, setRecords] = useState<ServiceRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -49,7 +48,7 @@ export function ServiceHistoryPage() {
     status: 'completed'
   })
 
-  const API_BASE_URL = 'http://localhost:8000'
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
   useEffect(() => {
     fetchServiceHistory()

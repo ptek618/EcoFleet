@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -6,6 +6,7 @@ import { Label } from '../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { Badge } from '../components/ui/badge'
 import { Separator } from '../components/ui/separator'
+import { Geolocation } from '@capacitor/geolocation'
 import { 
   MapPin, 
   Phone, 
@@ -40,7 +41,7 @@ export function DealerFinderPage() {
   const [serviceFilter, setServiceFilter] = useState('all')
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null)
 
-  const API_BASE_URL = 'http://localhost:8000'
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
   useEffect(() => {
     fetchDealers()
@@ -65,19 +66,29 @@ export function DealerFinderPage() {
     }
   }
 
-  const getUserLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          })
-        },
-        (error) => {
-          console.log('Location access denied:', error)
-        }
-      )
+  const getUserLocation = async () => {
+    try {
+      const coordinates = await Geolocation.getCurrentPosition()
+      setUserLocation({
+        lat: coordinates.coords.latitude,
+        lng: coordinates.coords.longitude
+      })
+    } catch (error) {
+      console.log('Capacitor geolocation error:', error)
+      
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setUserLocation({
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            })
+          },
+          (error) => {
+            console.log('Location access denied:', error)
+          }
+        )
+      }
     }
   }
 

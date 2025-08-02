@@ -1,0 +1,32 @@
+name: ecofleet-apu
+services:
+- name: backend
+  source_dir: /backend
+  github:
+    repo: ptek618/EcoFleet
+    branch: devin/1754147792-ecofleet-mobile-app
+  run_command: poetry run fastapi run app/main.py --host 0.0.0.0 --port $PORT
+  environment_slug: python
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  envs:
+  - key: SECRET_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: CORS_ORIGINS
+    value: ${frontend.PUBLIC_URL}
+    scope: RUN_TIME
+- name: frontend
+  source_dir: /frontend
+  github:
+    repo: ptek618/EcoFleet
+    branch: devin/1754147792-ecofleet-mobile-app
+  build_command: npm run build
+  run_command: npx serve -s dist -p $PORT
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  envs:
+  - key: VITE_API_URL
+    value: ${backend.PUBLIC_URL}
+    scope: BUILD_TIME

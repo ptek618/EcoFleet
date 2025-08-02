@@ -28,7 +28,7 @@ export function ContactPage() {
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
 
-  const API_BASE_URL = 'http://localhost:8000'
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
