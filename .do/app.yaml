@@ -1,4 +1,4 @@
-name: ecofleet-apu-final
+name: ecofleet-apu-corrected
 services:
 - name: backend
   source_dir: /backend
