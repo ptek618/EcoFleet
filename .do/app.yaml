@@ -1,4 +1,4 @@
-name: ecofleet-apu-dockerfile
+name: ecofleet-apu-fixed
 services:
 - name: backend
   git:
