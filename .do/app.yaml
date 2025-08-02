@@ -16,6 +16,9 @@ services:
   - key: CORS_ORIGINS
     value: ${frontend.PUBLIC_URL}
     scope: RUN_TIME
+  - key: DATABASE_URL
+    value: ${ecofleet-db.DATABASE_URL}
+    scope: RUN_TIME
 - name: frontend
   source_dir: /frontend
   github:
@@ -30,3 +33,10 @@ services:
   - key: VITE_API_URL
     value: ${backend.PUBLIC_URL}
     scope: BUILD_TIME
+
+databases:
+- name: ecofleet-db
+  engine: PG
+  version: "15"
+  size: basic
+  num_nodes: 1

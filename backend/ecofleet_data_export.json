@@ -1,0 +1,83 @@
+{
+  "users": [
+    {
+      "id": "admin-user-1",
+      "email": "admin@ecofleet.com",
+      "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+      "full_name": "EcoFleet Administrator",
+      "phone": null,
+      "role": "admin",
+      "created_at": "2025-08-02 18:06:23.798750"
+    }
+  ],
+  "dealers": [
+    {
+      "id": "dealer1",
+      "name": "EcoFleet Service Center - Chicago",
+      "address": "123 Industrial Blvd",
+      "city": "Chicago",
+      "state": "IL",
+      "zip_code": "60601",
+      "phone": "(312) 555-0123",
+      "email": "chicago@ecofleet.com",
+      "services": "[\"sales\", \"service\", \"support\"]",
+      "latitude": 41.8781,
+      "longitude": -87.6298
+    },
+    {
+      "id": "dealer2",
+      "name": "Midwest APU Solutions",
+      "address": "456 Truck Stop Way",
+      "city": "Indianapolis",
+      "state": "IN",
+      "zip_code": "46201",
+      "phone": "(317) 555-0456",
+      "email": "indy@midwestapu.com",
+      "services": "[\"service\", \"support\"]",
+      "latitude": 39.7684,
+      "longitude": -86.1581
+    }
+  ],
+  "downloads": [
+    {
+      "id": "download1",
+      "title": "HP2000 APU Installation Manual",
+      "description": "Complete installation guide for HP2000 APU systems",
+      "file_url": "/downloads/hp2000-install-manual.pdf",
+      "category": "manual",
+      "version": "v2.1",
+      "file_size": "5.2 MB",
+      "upload_date": "2025-08-02 18:06:23.793906"
+    },
+    {
+      "id": "download2",
+      "title": "Firmware Update v3.4.1",
+      "description": "Latest firmware update with improved efficiency",
+      "file_url": "/downloads/firmware-v3.4.1.bin",
+      "category": "update",
+      "version": "3.4.1",
+      "file_size": "2.8 MB",
+      "upload_date": "2025-08-02 18:06:23.793958"
+    }
+  ],
+  "faq": [
+    {
+      "id": "faq1",
+      "question": "How do I start my HP2000 APU remotely?",
+      "answer": "Use the EcoFleet mobile app to start your APU remotely. Ensure you have a paid subscription and your device is connected to the network.",
+      "category": "operation",
+      "order": 1
+    },
+    {
+      "id": "faq2",
+      "question": "What maintenance is required for my APU?",
+      "answer": "Regular maintenance includes oil changes every 500 hours, air filter replacement every 250 hours, and annual inspections.",
+      "category": "maintenance",
+      "order": 2
+    }
+  ],
+  "apu_devices": [],
+  "forum_posts": [],
+  "service_records": [],
+  "photo_uploads": []
+}
